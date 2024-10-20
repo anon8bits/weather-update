@@ -44,7 +44,7 @@ async function fetchWeatherData(city, context) {
         const response = await axios.get(url, {
             timeout: 5000
         });
-        
+
         if (!response.data || !response.data.main) {
             throw new Error('Invalid weather data format');
         }
@@ -70,11 +70,15 @@ async function fetchWeatherData(city, context) {
 async function insertWeatherData(params, context) {
     try {
         const pool = await getSqlPool();
+        const utcTimestamp = new Date(params.timestamp);
+        const istOffset = 5.5 * 60 * 60 * 1000;
+        const istTimestamp = new Date(utcTimestamp.getTime() + istOffset);
+
         const query = `
             INSERT INTO weather_data (city, temperature, feels_like, pressure, humidity, weather, timestamp)
             VALUES (@city, @temperature, @feels_like, @pressure, @humidity, @weather, @timestamp);
         `;
-        
+
         await pool.request()
             .input('city', sql.NVarChar, params.city)
             .input('temperature', sql.Float, params.temperature)
@@ -82,9 +86,9 @@ async function insertWeatherData(params, context) {
             .input('pressure', sql.Int, params.pressure)
             .input('humidity', sql.Int, params.humidity)
             .input('weather', sql.NVarChar, params.weather)
-            .input('timestamp', sql.DateTimeOffset, new Date(params.timestamp))
+            .input('timestamp', sql.DateTimeOffset, istTimestamp)
             .query(query);
-        
+
         context.log(`Weather data for ${params.city} inserted successfully.`);
     } catch (err) {
         context.error(`Error inserting weather data for ${params.city}: ${err.message}`);
@@ -106,7 +110,7 @@ app.timer('weatherTrigger', {
             const weatherDataResults = await Promise.all(weatherPromises);
 
             const validWeatherData = weatherDataResults.filter(data => data !== null);
-            
+
             if (validWeatherData.length === 0) {
                 context.error('No valid weather data collected for any city');
                 return;
@@ -122,9 +126,3 @@ app.timer('weatherTrigger', {
         }
     }
 });
-
-// app.shutdown(async () => {
-//     if (sqlPool) {
-//         await sqlPool.close();
-//     }
-// });
